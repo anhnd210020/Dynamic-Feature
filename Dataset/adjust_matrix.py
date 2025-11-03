@@ -29,7 +29,7 @@ for address, transactions in accounts_data.items():
 num_abnormal = len(abnormal_accounts)
 
 # 从正常账户中随机选择异常账户数目的两倍
-selected_normal_accounts = random.sample(normal_accounts.keys(), 2 * num_abnormal)
+selected_normal_accounts = random.sample(list(normal_accounts.keys()), 2 * num_abnormal)
 adjusted_normal_accounts = {addr: normal_accounts[addr] for addr in selected_normal_accounts}
 
 # 合并调整后的正常账户和所有异常账户
