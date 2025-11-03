@@ -46,7 +46,7 @@ def extract_transactions(G):
     return transactions
 
 def data_generate():
-    graph_file = 'MulDiGraph.pkl'
+    graph_file = '/home/ducanhhh/Dynamic_Feature/Dataset/MulDiGraph.pkl'
     out_file = 'transactions1.pkl'
     
     # 读取图数据
