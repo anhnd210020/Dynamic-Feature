@@ -13,9 +13,14 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.utils import shuffle
 
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+    
 from env_config import env_config
 from utils import clean_str, del_http_user_tokenize
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 random.seed(env_config.GLOBAL_SEED)
 np.random.seed(env_config.GLOBAL_SEED)
 
