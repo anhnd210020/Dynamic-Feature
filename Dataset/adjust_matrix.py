@@ -2,17 +2,17 @@ import pickle
 import random
 import numpy as np
 
-# 从文件中读取数据
+# Load data from file
 def load_data(filename):
     with open(filename, 'rb') as file:
         return pickle.load(file)
 
-# 保存数据到文件
+# Save data to file
 def save_data(data, filename):
     with open(filename, 'wb') as file:
         pickle.dump(data, file)
 
-# 分类统计正常和异常账户，并加载交易数据
+# Classify normal and abnormal accounts and load transaction data
 data_filename = 'transactions4.pkl'
 accounts_data = load_data(data_filename)
 
@@ -25,32 +25,32 @@ for address, transactions in accounts_data.items():
     elif transactions[0]['tag'] == 1:
         abnormal_accounts[address] = transactions
 
-# 获取异常账户数量
+# Get number of abnormal accounts
 num_abnormal = len(abnormal_accounts)
 
-# 从正常账户中随机选择异常账户数目的两倍
+# Randomly select twice the number of abnormal accounts from normal accounts
 selected_normal_accounts = random.sample(list(normal_accounts.keys()), 2 * num_abnormal)
 adjusted_normal_accounts = {addr: normal_accounts[addr] for addr in selected_normal_accounts}
 
-# 合并调整后的正常账户和所有异常账户
+# Merge adjusted normal accounts with all abnormal accounts
 adjusted_accounts_data = {**adjusted_normal_accounts, **abnormal_accounts}
 
-# 保存调整后的数据
+# Save adjusted data
 save_data_filename = 'adjusted_transactions4.pkl'
 save_data(adjusted_accounts_data, save_data_filename)
 
-print(f"数据已调整并保存到 {save_data_filename}")
-print(f"异常账户数: {len(abnormal_accounts)}")
-print(f"选中的正常账户数: {len(adjusted_normal_accounts)}")
+print(f"Data has been adjusted and saved to {save_data_filename}")
+print(f"Number of abnormal accounts: {len(abnormal_accounts)}")
+print(f"Number of selected normal accounts: {len(adjusted_normal_accounts)}")
 
-# 打印前十个账户的前十条交易记录
-print("\n前十个账户的前十条交易记录:")
-for address in list(adjusted_accounts_data.keys())[:10]:  # 只展示前十个账户的数据
-    print(f"\n账户 {address} 的前十条交易记录:")
-    for transaction in adjusted_accounts_data[address][:10]:  # 每个账户显示前十条记录
+# Print the first ten transactions of the first ten accounts
+print("\nFirst ten accounts with their first ten transaction records:")
+for address in list(adjusted_accounts_data.keys())[:10]:  # Only display data for the first ten accounts
+    print(f"\nAccount {address} - First ten transactions:")
+    for transaction in adjusted_accounts_data[address][:10]:  # Show the first ten records for each account
         print(transaction)
 
-# 定义权重计算函数
+# Define weight calculation function
 def calculate_weight(transaction):
     weights = []
     if '2-gram' in transaction:
@@ -61,20 +61,20 @@ def calculate_weight(transaction):
         weights.append(transaction['4-gram'] * 0.3)
     if '5-gram' in transaction:
         weights.append(transaction['5-gram'] * 0.4)
-    return np.sum(weights) if weights else 0  # 计算平均值，如果列表为空则返回0
+    return np.sum(weights) if weights else 0  # Compute average; if the list is empty, return 0
 
-# 提取所有独特的账户地址，只包含当前剩余账户
+# Extract all unique account addresses, only include currently remaining accounts
 addresses = set(adjusted_accounts_data.keys())
 
-# 地址到索引的映射
+# Mapping from address to index
 address_to_index = {addr: idx for idx, addr in enumerate(addresses)}
 
-# 创建邻接矩阵
+# Create adjacency matrix
 n = len(addresses)
-adj_matrix = np.zeros((n, n), dtype=float)  # 使用float类型以存储权重
-# 保存地址到索引的映射
+adj_matrix = np.zeros((n, n), dtype=float)  # Use float type to store weights
+# Save mapping from address to index
 save_data(address_to_index, 'data_Dataset.address_to_index')
-# 填充邻接矩阵
+# Fill adjacency matrix
 for account, transactions in adjusted_accounts_data.items():
     for transaction in transactions:
         from_addr = transaction['from_address']
@@ -82,8 +82,8 @@ for account, transactions in adjusted_accounts_data.items():
         if from_addr in addresses and to_addr in addresses:
             from_idx = address_to_index[from_addr]
             to_idx = address_to_index[to_addr]
-            weight = calculate_weight(transaction)  # 计算权重
-            adj_matrix[from_idx, to_idx] += weight  # 累加权重
+            weight = calculate_weight(transaction)  # Compute weight
+            adj_matrix[from_idx, to_idx] += weight  # Accumulate weight
 
-# 保存邻接矩阵
+# Save adjacency matrix
 save_data(adj_matrix, 'weighted_adjacency_matrix.pkl')
