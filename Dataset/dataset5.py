@@ -1,42 +1,48 @@
 import pickle
 import tqdm
 
-# 从文件中读取数据
+# Load data from file
 def load_data(filename):
     with open(filename, 'rb') as file:
         return pickle.load(file)
 
-# 保存数据到文件
+# Save data to file
 def save_data(data, filename):
     with open(filename, 'wb') as file:
         pickle.dump(data, file)
 
-# 删除特定字段
+# Remove specific fields
 def remove_fields(accounts, fields):
-    for address in tqdm.tqdm(accounts.keys(), desc="删除字段"):
+    for address in tqdm.tqdm(accounts.keys(), desc="Removing fields"):
         for transaction in accounts[address]:
             for field in fields:
                 if field in transaction:
                     del transaction[field]
 
-# 加载数据
+# Load data
 accounts_data = load_data('transactions4.pkl')
 
-# 需要删除的字段
+# Fields to remove
 fields_to_remove = ['from_address', 'to_address', 'timestamp']
 
-# 删除字段
+# Remove fields
 remove_fields(accounts_data, fields_to_remove)
 
-# 保存数据
+# Save data
 save_data(accounts_data, 'transactions5.pkl')
 
-# 打印每个账户的前十条处理后的交易记录
-print("打印每个账户的前十条处理后的交易记录:")
-for address in list(accounts_data.keys())[:10]:  # 只展示前十个账户的数据
-    print(f"账户 {address} 的前十条交易记录:")
-    for transaction in accounts_data[address][:10]:  # 每个账户显示前十条记录
+# Print the first ten processed transactions for each account
+print("Print the first ten processed transactions for each account:")
+for address in list(accounts_data.keys())[:10]:  # Only display data for the first ten accounts
+    print(f"Account {address} - First ten transactions:")
+    for transaction in accounts_data[address][:10]:  # Show the first ten records for each account
         print(transaction)
     print("\n")
 
-print("字段已删除，并保存数据到 transactions5.pkl 中。")
+print("Fields have been removed and data saved to transactions5.pkl.")
+
+
+
+
+
+
