@@ -2,36 +2,36 @@ import pickle
 import random
 import tqdm
 
-# 从文件中读取数据
+# Load data from file
 def load_data(filename):
     with open(filename, 'rb') as file:
         return pickle.load(file)
 
-# 保存数据到文件
+# Save data to file
 def save_data(data, filename):
     with open(filename, 'wb') as file:
         pickle.dump(data, file)
 
-# 打乱每个账户中的交易数据顺序
+# Shuffle the order of transaction data within each account
 def shuffle_transactions(accounts):
-    for address in tqdm.tqdm(accounts.keys(), desc="打乱交易顺序"):
+    for address in tqdm.tqdm(accounts.keys(), desc="Shuffling transactions"):
         random.shuffle(accounts[address])
 
-# 加载数据
+# Load data
 accounts_data = load_data('transactions5.pkl')
 
-# 打乱交易数据
+# Shuffle transaction data
 shuffle_transactions(accounts_data)
 
-# 保存数据
+# Save data
 save_data(accounts_data, 'transactions6.pkl')
 
-# 打印每个账户的前十条处理后的交易记录
-print("打印每个账户的前十条处理后的交易记录:")
-for address in list(accounts_data.keys())[:5]:  # 只展示前十个账户的数据
-    print(f"账户 {address} 的前十条交易记录:")
-    for transaction in accounts_data[address][:5]:  # 每个账户显示前十条记录
+# Print the first five processed transactions for each account
+print("Print the first five processed transactions for each account:")
+for address in list(accounts_data.keys())[:5]:  # Only display data for the first five accounts
+    print(f"Account {address} - First five transactions:")
+    for transaction in accounts_data[address][:5]:  # Show the first five records for each account
         print(transaction)
     print("\n")
 
-print("交易数据已被打乱，并保存到 transactions6.pkl 中。")
+print("Transaction data has been shuffled and saved to transactions6.pkl.")
