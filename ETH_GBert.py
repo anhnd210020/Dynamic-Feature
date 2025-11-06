@@ -73,9 +73,9 @@ import torch.nn.functional as F
 
 def DiffSoftmax(logits, tau=1.0, hard=False, dim=-1):
     """
-    实现 DiffSoftmax，用于在训练中使用软标签或硬标签。
-    - tau: 温度参数，控制 softmax 输出的平滑度
-    - hard: 是否使用硬标签
+    Implement DiffSoftmax for using soft or hard labels during training.
+    - tau: Temperature parameter that controls the smoothness of the softmax output
+    - hard: Whether to use hard labels
     """
     y_soft = (logits / tau).softmax(dim)
     if hard:
