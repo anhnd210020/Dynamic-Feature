@@ -137,42 +137,8 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
         else:
             tokens_b.pop()
 
-
-# def example2feature(
-#     example, tokenizer, gcn_vocab_map, max_seq_len, gcn_embedding_dim
-# ):
-#
-#     tokens_a = example.text_a.split()
-#     assert example.text_b == None
-#     if len(tokens_a) > max_seq_len - 1 - gcn_embedding_dim:
-#         tokens_a = tokens_a[: (max_seq_len - 1 - gcn_embedding_dim)]
-#
-#     gcn_vocab_ids = []
-#     for w in tokens_a:
-#         gcn_vocab_ids.append(gcn_vocab_map.get(w, -1))
-#
-#     tokens = (
-#         ["[CLS]"] + tokens_a + ["[SEP]" for i in range(gcn_embedding_dim + 1)]
-#     )
-#     segment_ids = [0] * len(tokens)
-#
-#     input_ids = tokenizer.convert_tokens_to_ids(tokens)
-#     input_mask = [1] * len(input_ids)
-#
-#     feat = InputFeatures(
-#         guid=example.guid,
-#         tokens=tokens,
-#         input_ids=input_ids,
-#         gcn_vocab_ids=gcn_vocab_ids,
-#         input_mask=input_mask,
-#         segment_ids=segment_ids,
-#         # label_id=label2idx[example.label]
-#         confidence=example.confidence,
-#         label_id=example.label,
-#     )
-#     return feat
 def example2feature(example, tokenizer, gcn_vocab_map, max_seq_len, gcn_embedding_dim):
-    tokens_a = example.text_a.split()  # 假设 text_a 包含的是账户地址或交易相关的字段
+    tokens_a = example.text_a.split()  # Assume text_a contains account addresses or transaction-related fields
     assert example.text_b == None
     if len(tokens_a) > max_seq_len - 1 - gcn_embedding_dim:
         tokens_a = tokens_a[: (max_seq_len - 1 - gcn_embedding_dim)]
@@ -182,18 +148,17 @@ def example2feature(example, tokenizer, gcn_vocab_map, max_seq_len, gcn_embeddin
         if word in gcn_vocab_map:
             gcn_vocab_ids.append(gcn_vocab_map[word])
         else:
-            # 如果词汇/地址不在 gcn_vocab_map 中，使用默认值（如 -1 表示未找到）
-            gcn_vocab_ids.append(gcn_vocab_map.get('UNK', -1))  # 'UNK' 可以替换为合适的默认值
-
-    # 构建 BERT 输入的 tokens，包括 [CLS] 和 [SEP]
+            # If the word/address is not in gcn_vocab_map, use a default value (e.g., -1 means not found)
+            gcn_vocab_ids.append(gcn_vocab_map.get('UNK', -1))  # 'UNK' can be replaced with a suitable default value
+    # Build BERT input tokens, including [CLS] and [SEP]
     tokens = ["[CLS]"] + tokens_a + ["[SEP]" for _ in range(gcn_embedding_dim + 1)]
     segment_ids = [0] * len(tokens)
 
-    # 将 tokens 转换为 BERT 所需的 input_ids
+    # Convert tokens into input_ids required by BERT
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     input_mask = [1] * len(input_ids)
 
-    # 创建并返回 InputFeatures 对象
+    # Create and return the InputFeatures object
     feat = InputFeatures(
         guid=example.guid,
         tokens=tokens,
