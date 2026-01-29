@@ -1,3 +1,4 @@
+#ETH-GSetBert
 import argparse
 import gc
 import os
@@ -140,6 +141,24 @@ for i in range(len(names)):
     address_to_index,
 ) = tuple(objects)
 
+# === Load SetTransformer banks (nếu đã tạo bằng prepare_data.py) ===
+import numpy as np, os
+
+set_bank_path = 'data/preprocessed/Dataset/set_feats.npy'
+set_mask_path = 'data/preprocessed/Dataset/set_mask.npy'
+
+if os.path.exists(set_bank_path) and os.path.exists(set_mask_path):
+    set_bank = np.load(set_bank_path)      # [N, Lmax, d_in], float32
+    set_mask_bank = np.load(set_mask_path) # [N, Lmax], bool
+    set_meta = {"Lmax": int(set_bank.shape[1]), "d_in": int(set_bank.shape[2])}
+    # sanity check nhẹ (không bắt buộc)
+    if set_bank.shape[0] != len(address_to_index):
+        print(f"[WARN] set_feats N={set_bank.shape[0]} != address_to_index N={len(address_to_index)}")
+else:
+    print("[INFO] Không tìm thấy set_feats.npy / set_mask.npy -> chạy theo đường cũ (không bật tri-fusion).")
+    set_bank, set_mask_bank, set_meta = None, None, None
+
+
 label2idx = lables_list[0]
 idx2label = lables_list[1]
 
@@ -169,34 +188,15 @@ test_examples = [
     ]
 ]
 
-norm_gcn_vocab_adj_list = []
+# === Load normalized adjacency (COO) and build gcn_adj_list ===
 import numpy as np
-import pickle
-def load_data(filename):
-    with open(filename, 'rb') as file:
-        return pickle.load(file)
-weighted_adj_matrix = load_data('data/preprocessed/Dataset/weighted_adjacency_matrix.pkl')
-def adjust_matrix_size(adj_matrix, target_size):
-    current_size = adj_matrix.shape[0]
-    if current_size == target_size:
-        return adj_matrix
-    
-    if current_size > target_size:
-        adj_matrix = adj_matrix[:target_size, :target_size]
-    else:
-        padding = np.zeros((target_size - current_size, target_size - current_size))
-        adj_matrix = np.block([
-            [adj_matrix, np.zeros((current_size, target_size - current_size))],
-            [np.zeros((target_size - current_size, current_size)), padding]
-        ])
-    
-    return adj_matrix
+import scipy.sparse as sp
+from utils import sparse_scipy2torch
 
-adjusted_adj_matrix = adjust_matrix_size(weighted_adj_matrix, 9549)
+npz = np.load('data/preprocessed/Dataset/norm_adj_coo.npz')
+A_hat = sp.coo_matrix((npz['data'], (npz['row'], npz['col'])), shape=tuple(npz['shape']))
+gcn_adj_list = [sparse_scipy2torch(A_hat).to(device)]
 
-gcn_vocab_adj = csr_matrix(adjusted_adj_matrix )
-gcn_adj_list = [normalize_adj(gcn_vocab_adj).tocoo()]
-gcn_adj_list = [sparse_scipy2torch(adj).to(device) for adj in gcn_adj_list]
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -221,7 +221,8 @@ def get_pytorch_dataloader(
     total_resample_size=-1,
 ):
     ds = CorpusDataset(
-        examples, tokenizer, address_to_index, MAX_SEQ_LENGTH, gcn_embedding_dim
+        examples, tokenizer, address_to_index, MAX_SEQ_LENGTH, gcn_embedding_dim,
+        set_bank=set_bank, set_mask_bank=set_mask_bank, set_meta=set_meta   # <-- thêm dòng này
     )
     if shuffle_choice == 0:  # shuffle==False
         return DataLoader(
@@ -309,16 +310,26 @@ def predict(model, examples, tokenizer, batch_size):
     with torch.no_grad():
         for i, batch in enumerate(dataloader):
             batch = tuple(t.to(device) for t in batch)
-            (
-                input_ids,
-                input_mask,
-                segment_ids,
-                _,
-                label_ids,
-                gcn_swop_eye,
-            ) = batch
+
+            # HỖ TRỢ 2 DẠNG BATCH:
+            # 6 phần tử (cũ):  (input_ids, input_mask, segment_ids, _, label_ids, gcn_swop_eye)
+            # 8 phần tử (mới): (input_ids, input_mask, segment_ids, _, label_ids, gcn_swop_eye, set_feats, set_mask)
+            if len(batch) == 6:
+                input_ids, input_mask, segment_ids, _, label_ids, gcn_swop_eye = batch
+                set_feats, set_mask = None, None
+            elif len(batch) == 8:
+                input_ids, input_mask, segment_ids, _, label_ids, gcn_swop_eye, set_feats, set_mask = batch
+            else:
+                raise ValueError(f"Unexpected batch size: {len(batch)}")
+
             score_out = model(
-                gcn_adj_list, gcn_swop_eye, input_ids, segment_ids, input_mask
+                gcn_adj_list,
+                gcn_swop_eye,
+                input_ids,
+                segment_ids,
+                input_mask,
+                set_feats=set_feats,
+                set_mask=set_mask,
             )
             if cfg_loss_criterion == "mse" and do_softmax_before_mse:
                 score_out = torch.nn.functional.softmax(score_out, dim=-1)
@@ -344,17 +355,24 @@ def evaluate(
     with torch.no_grad():
         for batch in predict_dataloader:
             batch = tuple(t.to(device) for t in batch)
-            (
-                input_ids,
-                input_mask,
-                segment_ids,
-                y_prob,
-                label_ids,
-                gcn_swop_eye,
-            ) = batch
-            # the parameter label_ids is None, model return the prediction score
+
+            # 6 phần tử (cũ) hoặc 8 phần tử (mới)
+            if len(batch) == 6:
+                input_ids, input_mask, segment_ids, y_prob, label_ids, gcn_swop_eye = batch
+                set_feats, set_mask = None, None
+            elif len(batch) == 8:
+                input_ids, input_mask, segment_ids, y_prob, label_ids, gcn_swop_eye, set_feats, set_mask = batch
+            else:
+                raise ValueError(f"Unexpected batch size: {len(batch)}")
+
             logits = model(
-                gcn_adj_list, gcn_swop_eye, input_ids, segment_ids, input_mask
+                gcn_adj_list,
+                gcn_swop_eye,
+                input_ids,
+                segment_ids,
+                input_mask,
+                set_feats=set_feats,
+                set_mask=set_mask,
             )
 
             if cfg_loss_criterion == "mse":
@@ -363,13 +381,9 @@ def evaluate(
                 loss = F.mse_loss(logits, y_prob)
             else:
                 if loss_weight is None:
-                    loss = F.cross_entropy(
-                        logits.view(-1, num_classes), label_ids
-                    )
+                    loss = F.cross_entropy(logits.view(-1, num_classes), label_ids)
                 else:
-                    loss = F.cross_entropy(
-                        logits.view(-1, num_classes), label_ids
-                    )
+                    loss = F.cross_entropy(logits.view(-1, num_classes), label_ids)
             ev_loss += loss.item()
 
             _, predicted = torch.max(logits, -1)
@@ -378,6 +392,7 @@ def evaluate(
             eval_accuracy = predicted.eq(label_ids).sum().item()
             total += len(label_ids)
             correct += eval_accuracy
+
 
         f1_metrics = f1_score(
             np.array(all_label_ids).reshape(-1),
@@ -411,6 +426,7 @@ def evaluate(
 
 
 print("\n----- Running training -----")
+
 if will_train_mode_from_checkpoint and os.path.exists(
     os.path.join(output_dir, model_file_4save)
 ):
@@ -481,6 +497,10 @@ global_step_th = int(
 
 all_loss_list = {"train": [], "valid": [], "test": []}
 all_f1_list = {"train": [], "valid": [], "test": []}
+
+test_f1_best = 0.0
+test_f1_best_epoch = 0
+
 for epoch in range(start_epoch, total_train_epochs):
     tr_loss = 0
     ep_train_start = time.time()
@@ -494,17 +514,30 @@ for epoch in range(start_epoch, total_train_epochs):
         if prev_save_step > -1:
             prev_save_step = -1
         batch = tuple(t.to(device) for t in batch)
-        (
-            input_ids,
-            input_mask,
-            segment_ids,
-            y_prob,
-            label_ids,
-            gcn_swop_eye,
-        ) = batch
+        if len(batch) == 8:
+            (
+                input_ids,
+                input_mask,
+                segment_ids,
+                y_prob,
+                label_ids,
+                gcn_swop_eye,
+                set_feats,      # NEW (không dùng)
+                set_mask,       # NEW (không dùng)
+            ) = batch
+        else:
+            (
+                input_ids,
+                input_mask,
+                segment_ids,
+                y_prob,
+                label_ids,
+                gcn_swop_eye,
+            ) = batch
+
 
         logits = model(
-            gcn_adj_list, gcn_swop_eye, input_ids, segment_ids, input_mask
+            gcn_adj_list, gcn_swop_eye, input_ids, segment_ids, input_mask, set_feats=set_feats, set_mask=set_mask
         )
 
         if cfg_loss_criterion == "mse":
@@ -547,6 +580,12 @@ for epoch in range(start_epoch, total_train_epochs):
     test_loss, _, test_f1 = evaluate(
         model, gcn_adj_list, test_dataloader, batch_size, epoch, "Test_set"
     )
+    
+    # Update best test F1
+    if test_f1 > test_f1_best:
+        test_f1_best = test_f1
+        test_f1_best_epoch = epoch
+    
     all_loss_list["train"].append(tr_loss)
     all_loss_list["valid"].append(valid_loss)
     all_loss_list["test"].append(test_loss)
@@ -585,4 +624,9 @@ print(
 print(
     "**Test weighted F1 when valid best: %.3f"
     % (100 * test_f1_when_valid_best)
+)
+
+print(
+    "**Test weighted F1 (absolute best): %.3f at %d epoch."
+    % (100 * test_f1_best, test_f1_best_epoch)
 )
